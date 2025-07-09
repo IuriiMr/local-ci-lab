@@ -11,7 +11,7 @@ services:
       - "8080:80"     # GitLab UI
       - "8929:22"     # GitLab SSH
     environment:
-      GITLAB_ROOT_PASSWORD: rootpass123
+      GITLAB_ROOT_PASSWORD: Str0ng!GitLabPwd2025
     volumes:
       - ./data/gitlab/config:/etc/gitlab
       - ./data/gitlab/logs:/var/log/gitlab
