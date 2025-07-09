@@ -1,3 +1,4 @@
+version: "3.8"
 
 services:
 
@@ -7,94 +8,70 @@ services:
     hostname: gitlab.local
     restart: always
     ports:
-      - "8080:80"     # UI
-      - "8929:22"     # SSH
+      - "8080:80"
+      - "8929:22"
     environment:
-      GITLAB_ROOT_PASSWORD: Str0ng!GitLabPwd2025
+      GITLAB_ROOT_EMAIL: root@local
+      GITLAB_ROOT_PASSWORD: CakeEggMilk11!@
+      EXTERNAL_URL: http://gitlab.local
     volumes:
-      - ./dat/gitlab/config:/etc/gitlab
-      - ./dat/gitlab/logs:/var/log/gitlab
-      - ./dat/gitlab/data:/var/opt/gitlab
+      - ./data/gitlab/config:/etc/gitlab
+      - ./data/gitlab/logs:/var/log/gitlab
+      - ./data/gitlab/data:/var/opt/gitlab
 
-  dind:
-    image: docker:dind
-    container_name: gitlab-dind
-    privileged: true
-    restart: always
-    environment:
-      DOCKER_TLS_CERTDIR: ""
-    volumes:
-      - /var/lib/docker
-
-  gitlab-runner:
-    image: gitlab/gitlab-runner:latest
-    container_name: gitlab-runner
+  harbor:
+    image: goharbor/harbor-core:v2.11.0
+    container_name: harbor-core
     depends_on:
-      - gitlab
-      - dind
-    restart: always
-    volumes:
-      - ./config/runner:/etc/gitlab-runner:z
-      - /var/run/docker.sock:/var/run/docker.sock
+      - registry
+      - redis
+      - harbor-db
     environment:
-      - DOCKER_TLS_CERTDIR=""
+      CORE_SECRET: harbor12345
+      JOBSERVICE_SECRET: jobsecret123
+      POSTGRESQL_HOST: harbor-db
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: mysecret
+      REGISTRY_CONTROLLER_URL: http://registry:8080
+      PORTAL_URL: http://portal:8080
+      LOG_LEVEL: debug
 
-  harbor-db:
-    image: goharbor/harbor-db:v2.11.0
-    container_name: harbor-db
-    restart: always
-    environment:
-      POSTGRESQL_PASSWORD: changeit
-    volumes:
-      - ./data/harbor/database:/var/lib/postgresql/data
 
-  harbor-redis:
-    image: goharbor/redis-photon:v2.11.0
-    container_name: harbor-redis
-    restart: always
 
   registry:
     image: goharbor/registry-photon:v2.11.0
     container_name: harbor-registry
-    restart: always
     environment:
-      REGISTRY_HTTP_ADDR: :5000
+      REGISTRY_HTTP_ADDR: :8080
+
+  redis:
+    image: redis:7
+    container_name: harbor-redis
+
+  harbor-db:
+    image: postgres:13
+    container_name: harbor-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecret
     volumes:
-      - ./data/harbor/registry:/storage
+      - ./data/harbor/db:/var/lib/postgresql/data
 
   portal:
     image: goharbor/harbor-portal:v2.11.0
     container_name: harbor-portal
     restart: always
 
-  core:
-    image: goharbor/harbor-core:v2.11.0
-    container_name: harbor-core
-    restart: always
-    depends_on:
-      - harbor-db
-      - harbor-redis
-      - registry
-    environment:
-      CORE_SECRET: secret123
-      JOBSERVICE_SECRET: secret123
-      POSTGRESQL_HOST: harbor-db
-      POSTGRESQL_PORT: 5432
-      POSTGRESQL_USERNAME: postgres
-      POSTGRESQL_PASSWORD: changeit
-      REGISTRY_CONTROLLER_URL: http://registry:5000
-      PORTAL_URL: http://portal:8080
-      LOG_LEVEL: info
-
   jobservice:
     image: goharbor/harbor-jobservice:v2.11.0
     container_name: harbor-jobservice
     restart: always
     depends_on:
-      - core
+      - harbor-core
     environment:
-      CORE_URL: http://core:8080
-      JOBSERVICE_SECRET: secret123
+      CORE_URL: http://harbor-core:8080
+      JOBSERVICE_SECRET: jobsecret123
 
   nginx:
     image: goharbor/nginx-photon:v2.11.0
@@ -102,9 +79,32 @@ services:
     restart: always
     depends_on:
       - portal
-      - core
+      - harbor-core
       - jobservice
     ports:
       - "30002:8080"
     volumes:
       - ./data/harbor/registry:/storage
+
+
+  dind:
+    image: docker:dind
+    container_name: gitlab-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - /var/lib/docker
+
+  runner:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab-runner
+    depends_on:
+      - gitlab
+      - dind
+    restart: always
+    volumes:
+      - ./config/runner:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_TLS_CERTDIR=""
