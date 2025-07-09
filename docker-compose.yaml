@@ -1,0 +1,114 @@
+version: "3.8"
+
+services:
+  ## === GitLab CE ===
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab
+    hostname: gitlab.local
+    restart: always
+    ports:
+      - "8080:80"     # GitLab UI
+      - "8929:22"     # GitLab SSH
+    environment:
+      GITLAB_ROOT_PASSWORD: rootpass123
+    volumes:
+      - ./data/gitlab/config:/etc/gitlab
+      - ./data/gitlab/logs:/var/log/gitlab
+      - ./data/gitlab/data:/var/opt/gitlab
+
+  ## === Docker-in-Docker ===
+  dind:
+    image: docker:dind
+    container_name: gitlab-dind
+    privileged: true
+    restart: always
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - /var/lib/docker
+
+  ## === GitLab Runner ===
+  gitlab-runner:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab-runner
+    depends_on:
+      - gitlab
+      - dind
+    restart: always
+    volumes:
+      - ./config/runner:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_TLS_CERTDIR=""
+
+  ## === Harbor with UI ===
+  harbor-db:
+    image: goharbor/harbor-db:v2.11.0
+    container_name: harbor-db
+    restart: always
+    environment:
+      POSTGRESQL_PASSWORD: changeit
+    volumes:
+      - ./data/harbor/database:/var/lib/postgresql/data
+
+  harbor-redis:
+    image: goharbor/redis-photon:v2.11.0
+    container_name: harbor-redis
+    restart: always
+
+  registry:
+    image: goharbor/registry-photon:v2.11.0
+    container_name: harbor-registry
+    restart: always
+    environment:
+      REGISTRY_HTTP_ADDR: :5000
+    volumes:
+      - ./data/harbor/registry:/storage
+
+  portal:
+    image: goharbor/harbor-portal:v2.11.0
+    container_name: harbor-portal
+    restart: always
+
+  core:
+    image: goharbor/harbor-core:v2.11.0
+    container_name: harbor-core
+    restart: always
+    depends_on:
+      - harbor-db
+      - harbor-redis
+      - registry
+    environment:
+      CORE_SECRET: secret123
+      JOBSERVICE_SECRET: secret123
+      POSTGRESQL_HOST: harbor-db
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: changeit
+      REGISTRY_CONTROLLER_URL: http://registry:5000
+      PORTAL_URL: http://portal:8080
+      LOG_LEVEL: info
+
+  jobservice:
+    image: goharbor/harbor-jobservice:v2.11.0
+    container_name: harbor-jobservice
+    restart: always
+    depends_on:
+      - core
+    environment:
+      CORE_URL: http://core:8080
+      JOBSERVICE_SECRET: secret123
+
+  nginx:
+    image: goharbor/nginx-photon:v2.11.0
+    container_name: harbor-nginx
+    restart: always
+    depends_on:
+      - portal
+      - core
+      - jobservice
+    ports:
+      - "30002:8080"
+    volumes:
+      - ./data/harbor/registry:/storage
