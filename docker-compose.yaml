@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  ## === GitLab CE ===
+
   gitlab:
     image: gitlab/gitlab-ce:latest
     container_name: gitlab
@@ -17,7 +17,6 @@ services:
       - ./data/gitlab/logs:/var/log/gitlab
       - ./data/gitlab/data:/var/opt/gitlab
 
-  ## === Docker-in-Docker ===
   dind:
     image: docker:dind
     container_name: gitlab-dind
@@ -28,7 +27,6 @@ services:
     volumes:
       - /var/lib/docker
 
-  ## === GitLab Runner ===
   gitlab-runner:
     image: gitlab/gitlab-runner:latest
     container_name: gitlab-runner
@@ -37,12 +35,11 @@ services:
       - dind
     restart: always
     volumes:
-      - ./config/runner:/etc/gitlab-runner
+      - ./config/runner:/etc/gitlab-runner:z
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DOCKER_TLS_CERTDIR=""
 
-  ## === Harbor with UI ===
   harbor-db:
     image: goharbor/harbor-db:v2.11.0
     container_name: harbor-db
